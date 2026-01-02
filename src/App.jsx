@@ -10,7 +10,7 @@ import staticParkingsData from './data/static_parkings.json';
 // 設定區域
 // ==========================================
 // 請填入您的 GAS 網址 (需使用新款 v2.0 後端)
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycby6jEHc0kSPE58EJPs9dqZkATVu2srXh6gi1ElIrH1RuS7veEVBMSHFuH-jZEYqwlpK/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxFM0AIZ1IN7tvOli-oENvpjNpTH7IpiII3wFD0NkJVVyLz49SeMq34f-mmtsyeoUWbBg/exec";
 
 const AUTO_REFRESH_INTERVAL = 60000;
 
@@ -161,16 +161,24 @@ function App() {
 
             // 2. 抓取動態資料 (只抓當前城市的狀態)
             let statusMap = {};
-            if (GAS_API_URL) {
-                const url = `${GAS_API_URL}?city=${city}`;
-                const res = await fetch(url);
-                const json = await res.json();
-                if (json.status === 'success') {
-                    statusMap = json.data;
+
+            // 使用 try-catch 包裹動態資料的 fetch，避免失敗時導致靜態資料也不顯示
+            try {
+                if (GAS_API_URL) {
+                    const url = `${GAS_API_URL}?city=${city}`;
+                    const res = await fetch(url);
+                    const json = await res.json();
+                    if (json.status === 'success') {
+                        statusMap = json.data;
+                    }
+                } else {
+                    // 模擬延遲
+                    await new Promise(r => setTimeout(r, 500));
                 }
-            } else {
-                // 模擬延遲
-                await new Promise(r => setTimeout(r, 500));
+            } catch (fetchErr) {
+                console.warn("Dynamic data fetch warning:", fetchErr);
+                // 失敗時不拋出錯誤，讓程式繼續執行以顯示靜態資料
+                if (!isSilent) setLocationStatus('僅顯示靜態資料 (API連線中斷)');
             }
 
             // 3. 合併資料：將即時狀態填入靜態資料
@@ -188,17 +196,23 @@ function App() {
 
             mergedData.sort((a, b) => a.distance - b.distance);
 
+            // 如果完全沒有資料
+            if (mergedData.length === 0) {
+                if (!isSilent) setLocationStatus('附近 20km 無停車場');
+            } else if (!isSilent && Object.keys(statusMap).length > 0) {
+                setLocationStatus('資料更新完成');
+            }
+
             setParkings(mergedData);
             setLastUpdated(new Date());
 
             if (mapRef.current) {
                 updateMapMarkers(mergedData);
             }
-            if (!isSilent) setLocationStatus('系統運作正常');
 
         } catch (error) {
             console.error("Fetch data error:", error);
-            setLocationStatus('資料讀取錯誤');
+            setLocationStatus('系統發生錯誤');
         } finally {
             setLoading(false);
         }
@@ -312,7 +326,7 @@ function App() {
     return (
         <div className="relative w-full h-full">
             <div id="map-container" className={viewMode === 'list' ? 'hidden' : 'block'}></div>
-
+            {/* List View logic remains similar, omitted for brevity but should be consistent */}
             {viewMode === 'list' && (
                 <div className="absolute inset-0 bg-slate-100 overflow-y-auto pb-32">
                     <div className="p-4 pt-24 max-w-md mx-auto space-y-4">
